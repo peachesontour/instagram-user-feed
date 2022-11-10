@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Instagram\Model;
 
-class Reels
+class Video
 {
     /**
      * @var string
@@ -42,11 +42,6 @@ class Reels
     private $views;
 
     /**
-     * @var int
-     */
-    private $plays;
-
-    /**
      * @var float
      */
     private $duration;
@@ -60,11 +55,15 @@ class Reels
      * @var int
      */
     private $width;
-
     /**
      * @var boolean
      */
     private $hasAudio;
+
+    /**
+     * @var \StdClass
+     */
+    private $thumbnails;
 
     /**
      * @var array
@@ -299,6 +298,22 @@ class Reels
     }
 
     /**
+     * @return \StdClass
+     */
+    public function getThumbnails(): \StdClass
+    {
+        return $this->thumbnails;
+    }
+
+    /**
+     * @param \StdClass $thumbnails
+     */
+    public function setThumbnails(\StdClass $thumbnails): void
+    {
+        $this->thumbnails = $thumbnails;
+    }
+
+    /**
      * @return array
      */
     public function getImages(): array
@@ -331,19 +346,19 @@ class Reels
     }
 
     /**
-     * @param string $caption
-     */
-    public function setCaption(?string $caption): void
-    {
-        $this->caption = $caption;
-    }
-
-    /**
      * @return string
      */
     public function getCaption(): ?string
     {
         return $this->caption;
+    }
+
+    /**
+     * @param string $caption
+     */
+    public function setCaption(?string $caption): void
+    {
+        $this->caption = $caption;
     }
 
     /**
@@ -424,48 +439,5 @@ class Reels
     public function getUser(): User
     {
         return $this->user;
-    }
-
-    /**
-     * @return array
-     */
-    public function toArray(): array
-    {
-        return [
-            "id"        => $this->getId(),
-            "shortCode" => $this->getShortCode(),
-            "link"      => $this->getLink(),
-            "likes"     => $this->getLikes(),
-            "isLiked"   => $this->isLiked(),
-            "comments"  => $this->getComments(),
-            "views"     => $this->getViews(),
-            "plays"     => $this->getPlays(),
-            "duration"  => $this->getDuration(),
-            "height"    => $this->getHeight(),
-            "width"     => $this->getWidth(),
-            "hasAudio"  => $this->getHasAudio(),
-            "images"    => array_map(function ($image) {
-                return (array) $image;
-            }, $this->getImages()),
-            "videos"    => array_map(function ($video) {
-                return (array) $video;
-            }, $this->getVideos()),
-            "caption"   => $this->getCaption(),
-            "location"  => $this->getLocation(),
-            "date"      => $this->getDate(),
-            "hashtags"  => $this->getHashtags(),
-            "userTags"  => array_map(function ($user) {
-                return $user->toArray();
-            }, $this->getUserTags()),
-            "user"      => $this->getUser()->toArray()
-        ];
-    }
-
-    /**
-     * @return array
-     */
-    public function __serialize(): array
-    {
-        return $this->toArray();
     }
 }

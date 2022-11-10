@@ -7,7 +7,7 @@ namespace Instagram\Transport;
 use GuzzleHttp\ClientInterface;
 use Instagram\Auth\Session;
 use Instagram\Exception\{InstagramAuthException, InstagramFetchException};
-use Instagram\Utils\{UserAgentHelper, InstagramHelper};
+use Instagram\Utils\{OptionHelper, InstagramHelper, CacheResponse};
 
 abstract class AbstractDataFeed
 {
@@ -43,7 +43,8 @@ abstract class AbstractDataFeed
     {
         $headers = [
             'headers' => array_merge([
-                'user-agent' => UserAgentHelper::AGENT_DEFAULT,
+                'user-agent'       => OptionHelper::$USER_AGENT,
+                'accept-language'  => OptionHelper::$LOCALE,
                 'x-requested-with' => 'XMLHttpRequest',
             ], $headers),
         ];
@@ -53,6 +54,7 @@ abstract class AbstractDataFeed
         }
 
         $res = $this->client->request('GET', $endpoint, $headers);
+        CacheResponse::setResponse($res);
 
         $data = (string)$res->getBody();
         $data = json_decode($data);
@@ -73,10 +75,11 @@ abstract class AbstractDataFeed
     {
         $options = [
             'headers' => [
-                'user-agent' => UserAgentHelper::AGENT_DEFAULT,
+                'user-agent'       => OptionHelper::$USER_AGENT,
+                'accept-language'  => OptionHelper::$LOCALE,
                 'x-requested-with' => 'XMLHttpRequest',
                 'x-instagram-ajax' => $this->getRolloutHash(),
-                'x-csrftoken' => $this->session->getCookies()->getCookieByName('csrftoken')->getValue(),
+                'x-csrftoken'      => $this->session->getCookies()->getCookieByName('csrftoken')->getValue(),
             ],
             'cookies' => $this->session->getCookies(),
         ];
@@ -88,6 +91,7 @@ abstract class AbstractDataFeed
         }
 
         $res = $this->client->request('POST', $endpoint, $options);
+        CacheResponse::setResponse($res);
 
         $data = (string)$res->getBody();
         $data = json_decode($data);
@@ -110,20 +114,21 @@ abstract class AbstractDataFeed
         try {
             $baseRequest = $this->client->request('GET', InstagramHelper::URL_BASE, [
                 'headers' => [
-                    'user-agent' => UserAgentHelper::AGENT_DEFAULT,
+                    'user-agent'      => OptionHelper::$USER_AGENT,
+                    'accept-language' => OptionHelper::$LOCALE,
                 ],
             ]);
+            CacheResponse::setResponse($baseRequest);
 
             $html = (string)$baseRequest->getBody();
-
-            preg_match('/<script type="text\/javascript">window\._sharedData\s?=(.+);<\/script>/', $html, $matches);
+            //preg_match('/<script type="text\/javascript">window\._sharedData\s?=(.+);<\/script>/', $html, $matches);
+            preg_match('/\"client_revision\":(.*?),/', $html, $matches);
 
             if (!isset($matches[1])) {
-                throw new InstagramAuthException('Unable to extract JSON data');
+                throw new InstagramAuthException('Unable to extract server version');
             }
 
-            $data = json_decode($matches[1]);
-            return $data->rollout_hash;
+            return $matches[1];
         } catch (\Exception $e) {
             throw new InstagramFetchException($e->getMessage());
         }

@@ -8,7 +8,7 @@ use GuzzleHttp\{Client, ClientInterface};
 use Instagram\Utils\CacheHelper;
 use GuzzleHttp\Cookie\{SetCookie, CookieJar};
 use Instagram\Auth\{Checkpoint\ImapClient, Login, Session};
-use Instagram\Exception\InstagramException;
+use Instagram\Exception\{InstagramException, InstagramAuthException};
 use Instagram\Hydrator\{LocationHydrator,
     MediaHydrator,
     MediaCommentsHydrator,
@@ -20,7 +20,8 @@ use Instagram\Hydrator\{LocationHydrator,
     HashtagHydrator,
     FollowerHydrator,
     FollowingHydrator,
-    LiveHydrator
+    LiveHydrator,
+    TimelineFeedHydrator
 };
 use Instagram\Model\{Location,
     Media,
@@ -35,7 +36,8 @@ use Instagram\Model\{Location,
     FollowerFeed,
     FollowingFeed,
     Live,
-    TaggedMediasFeed
+    TaggedMediasFeed,
+    TimelineFeed
 };
 use Instagram\Transport\{CommentPost,
     JsonMediaDetailedDataFeed,
@@ -56,10 +58,11 @@ use Instagram\Transport\{CommentPost,
     LikeUnlike,
     LocationData,
     LiveData,
-    ReelsDataFeed
+    ReelsDataFeed,
+    TimelineDataFeed
 };
 use Psr\Cache\CacheItemPoolInterface;
-use Instagram\Utils\InstagramHelper;
+use Instagram\Utils\{InstagramHelper, OptionHelper};
 
 class Api
 {
@@ -88,11 +91,50 @@ class Api
      * @param ClientInterface|null $client
      * @param int|null $challengeDelay
      */
-    public function __construct(CacheItemPoolInterface $cachePool, ClientInterface $client = null, ?int $challengeDelay = 3)
+    public function __construct(CacheItemPoolInterface $cachePool = null, ClientInterface $client = null, ?int $challengeDelay = 3)
     {
         $this->cachePool = $cachePool;
         $this->client = $client ?: new Client();
         $this->challengeDelay = $challengeDelay;
+    }
+
+    /**
+     * @param string $userAgent
+     */
+    public function setUserAgent(string $userAgent): void
+    {
+        OptionHelper::$USER_AGENT  = $userAgent;
+    }
+
+    /**
+     * @param string $language
+     */
+    public function setLanguage(string $language): void
+    {
+        OptionHelper::$LOCALE  = $language;
+    }
+
+    /**
+     * @param \GuzzleHttp\Cookie\CookieJar $cookies
+     *
+     * @throws Exception\InstagramAuthException
+     */
+    public function loginWithCookies(CookieJar $cookies): void
+    {
+        $login = new Login($this->client, '', '', null, $this->challengeDelay);
+
+        /** @var SetCookie */
+        $session = $cookies->getCookieByName('sessionId');
+
+        // Session expired (should never happened, Instagram TTL is ~ 1 year)
+        if ($session->getExpires() < time()) {
+            throw new InstagramAuthException('Session expired, Please login with instagram credentials.');
+        }
+
+        // Get New Cookies
+        $cookies = $login->withCookies($session->toArray());
+
+        $this->session = new Session($cookies);
     }
 
     /**
@@ -107,6 +149,10 @@ class Api
     public function login(string $username, string $password, ?ImapClient $imapClient = null): void
     {
         $login = new Login($this->client, $username, $password, $imapClient, $this->challengeDelay);
+
+        if ( !($this->cachePool instanceof CacheItemPoolInterface) ) {
+            throw new InstagramAuthException('You must set cachePool / login with cookies, example: \n$cachePool = new \Symfony\Component\Cache\Adapter\FilesystemAdapter("Instagram", 0, __DIR__ . "/../cache"); \n$api = new \Instagram\Api($cachePool);');
+        }
 
         // fetch previous session and re-use it
         $sessionData = $this->cachePool->getItem(Session::SESSION_KEY . '.' . CacheHelper::sanitizeUsername($username));
@@ -710,6 +756,26 @@ class Api
         return $this->getStoriesOfHighlightsFolder($storyFolder);
     }
 
+    /**
+     * @param string|null $maxId
+     *
+     * @return TimelineFeed
+     *
+     * @throws Exception\InstagramAuthException
+     * @throws Exception\InstagramFetchException
+     * @throws \GuzzleHttp\Exception\GuzzleException
+     */
+    public function getTimeline(string $maxId = null): TimelineFeed
+    {
+        $feed = new TimelineDataFeed($this->client, $this->session);
+        $data = $feed->fetchData($maxId);
+
+        $hydrator = new TimelineFeedHydrator();
+        $hydrator->hydrateTimelineFeed($data);
+
+        return $hydrator->getTimelineFeed();
+    }
+      
     /**
      * @param string $user
      *
